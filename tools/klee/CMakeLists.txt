@@ -6,7 +6,7 @@
 # License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
-add_executable(symloc
+add_executable(klee
   main.cpp
 )
 
@@ -14,9 +14,9 @@ set(KLEE_LIBS
   kleeCore
 )
 
-target_link_libraries(symloc ${KLEE_LIBS})
+target_link_libraries(klee ${KLEE_LIBS})
 
-install(TARGETS symloc RUNTIME DESTINATION bin)
+install(TARGETS klee RUNTIME DESTINATION bin)
 
 # The KLEE binary depends on the runtimes
-add_dependencies(symloc BuildKLEERuntiSmes)
+add_dependencies(klee BuildKLEERuntimes)

@@ -29,7 +29,7 @@
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
-#include "llvm/IR/CallSite.h"
+//#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
@@ -137,7 +137,8 @@ static bool instructionIsCoverable(Instruction *i) {
       Instruction *prev = &*(--it);
       if (isa<CallInst>(prev) || isa<InvokeInst>(prev)) {
         Function *target =
-            getDirectCallTarget(CallSite(prev), /*moduleIsFullyLinked=*/true);
+            //getDirectCallTarget(CallSite(prev), /*moduleIsFullyLinked=*/true);
+            getDirectCallTarget(*llvm::cast<llvm::CallBase>(prev), /*moduleIsFullyLinked=*/true);
         if (target && target->doesNotReturn())
           return false;
       }
@@ -794,7 +795,8 @@ void StatsTracker::computeReachableUncovered() {
         for (BasicBlock::iterator it = bbIt->begin(), ie = bbIt->end(); 
              it != ie; ++it) {
           Instruction *inst = &*it;
-          if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
+          /*
+	  if (isa<CallInst>(inst) || isa<InvokeInst>(inst)) {
             CallSite cs(inst);
             if (isa<InlineAsm>(cs.getCalledValue())) {
               // We can never call through here so assume no targets
@@ -802,7 +804,7 @@ void StatsTracker::computeReachableUncovered() {
               callTargets.insert(std::make_pair(inst,
                                                 std::vector<Function*>()));
             } else if (Function *target = getDirectCallTarget(
-                           cs, /*moduleIsFullyLinked=*/true)) {
+                           cs, true)) {
               callTargets[inst].push_back(target);
             } else {
               callTargets[inst] =
@@ -810,6 +812,24 @@ void StatsTracker::computeReachableUncovered() {
                                        km->escapingFunctions.end());
             }
           }
+	*/
+	  if (auto *CB = llvm::dyn_cast<llvm::CallBase>(inst)) {
+  llvm::Value *callee = CB->getCalledOperand()->stripPointerCasts();
+
+  if (llvm::isa<llvm::InlineAsm>(callee)) {
+    // We can never call through here so assume no targets
+    // (which should be correct anyhow).
+    callTargets.insert(std::make_pair(inst, std::vector<llvm::Function*>()));
+  } else if (llvm::Function *target =
+                 getDirectCallTarget(*CB, /*moduleIsFullyLinked=*/true)) {
+    callTargets[inst].push_back(target);
+  } else {
+    callTargets[inst] =
+        std::vector<llvm::Function*>(km->escapingFunctions.begin(),
+                                     km->escapingFunctions.end());
+  }
+}
+
         }
       }
     }

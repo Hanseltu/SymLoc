@@ -10,7 +10,10 @@
 #include "ExternalDispatcher.h"
 #include "klee/Config/Version.h"
 
-#include "llvm/IR/CallSite.h"
+//#include "llvm/IR/CallSite.h"
+#include "llvm/IR/InstrTypes.h"   // CallBase
+#include "llvm/IR/Instructions.h" // CallInst/InvokeInst definitions
+
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
@@ -196,7 +199,7 @@ bool ExternalDispatcherImpl::executeCall(Function *f, Instruction *i,
         std::move(dispatchModuleUniq)); // MCJIT takes ownership
     // Force code generation
     uint64_t fnAddr =
-        executionEngine->getFunctionAddress(dispatcher->getName());
+        executionEngine->getFunctionAddress(dispatcher->getName().str());
     executionEngine->finalizeObject();
     assert(fnAddr && "failed to get function address");
     (void)fnAddr;
@@ -253,9 +256,10 @@ bool ExternalDispatcherImpl::runProtectedCall(Function *f, uint64_t *args) {
 Function *ExternalDispatcherImpl::createDispatcher(Function *target,
                                                    Instruction *inst,
                                                    Module *module) {
-  if (!resolveSymbol(target->getName()))
+  if (!resolveSymbol(target->getName().str()))
     return 0;
 
+  /*
   CallSite cs;
   if (inst->getOpcode() == Instruction::Call) {
     cs = CallSite(cast<CallInst>(inst));
@@ -264,6 +268,14 @@ Function *ExternalDispatcherImpl::createDispatcher(Function *target,
   }
 
   Value **args = new Value *[cs.arg_size()];
+  */
+  llvm::CallBase *CB = nullptr;
+if (inst->getOpcode() == llvm::Instruction::Call)
+  CB = llvm::cast<llvm::CallInst>(inst);
+else
+  CB = llvm::cast<llvm::InvokeInst>(inst);
+
+llvm::Value **args = new llvm::Value *[CB->arg_size()];
 
   std::vector<Type *> nullary;
 
@@ -291,6 +303,7 @@ Function *ExternalDispatcherImpl::createDispatcher(Function *target,
       cast<PointerType>(target->getType())->getElementType());
 
   // Each argument will be passed by writing it into gTheArgsP[i].
+  /*
   unsigned i = 0, idx = 2;
   for (CallSite::arg_iterator ai = cs.arg_begin(), ae = cs.arg_end(); ai != ae;
        ++ai, ++i) {
@@ -309,6 +322,30 @@ Function *ExternalDispatcherImpl::createDispatcher(Function *target,
     unsigned argSize = argTy->getPrimitiveSizeInBits();
     idx += ((!!argSize ? argSize : 64) + 63) / 64;
   }
+  */
+  // Each argument will be passed by writing it into gTheArgsP[i].
+unsigned i = 0, idx = 2;
+for (unsigned ae = CB->arg_size(); i != ae; ++i) {
+  llvm::Value *ArgV = CB->getArgOperand(i);
+
+  // Determine the type the argument will be passed as. This accommodates for
+  // the corresponding code in Executor.cpp for handling calls to bitcasted
+  // functions.
+  llvm::Type *argTy =
+      (i < FTy->getNumParams() ? FTy->getParamType(i) : ArgV->getType());
+
+  llvm::Value *argI64p =
+      Builder.CreateGEP(llvm::Type::getInt64Ty(ctx), argI64s,
+                        llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), idx));
+
+  llvm::Value *argp =
+      Builder.CreateBitCast(argI64p, llvm::PointerType::getUnqual(argTy));
+  args[i] = Builder.CreateLoad(argTy, argp);
+
+  unsigned argSize = argTy->getPrimitiveSizeInBits();
+  idx += ((argSize ? argSize : 64) + 63) / 64;
+}
+
 
   auto dispatchTarget = module->getOrInsertFunction(target->getName(), FTy,
                                                     target->getAttributes());

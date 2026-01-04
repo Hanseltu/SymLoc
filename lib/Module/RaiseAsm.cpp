@@ -47,7 +47,10 @@ bool RaiseAsmPass::runOnInstruction(Module &M, Instruction *I) {
   if (!ci)
     return false;
 
-  InlineAsm *ia = dyn_cast<InlineAsm>(ci->getCalledValue());
+  //InlineAsm *ia = dyn_cast<InlineAsm>(ci->getCalledValue());
+  llvm::Value *callee = ci->getCalledOperand()->stripPointerCasts();
+  llvm::InlineAsm *ia = llvm::dyn_cast<llvm::InlineAsm>(callee);
+
   if (!ia)
     return false;
 

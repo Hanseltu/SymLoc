@@ -58,7 +58,10 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/CallSite.h"
+//#include "llvm/IR/CallSite.h"
+#include "llvm/IR/InstrTypes.h"   // for CallBase
+#include "llvm/IR/Instructions.h" // for CallInst/InvokeInst helpers
+
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
@@ -515,7 +518,7 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
   SmallString<128> LibPath(opts.LibraryDir);
   llvm::sys::path::append(LibPath, "libkleeRuntimeIntrinsic.bca");
   std::string error;
-  if (!klee::loadFile(LibPath.str(), modules[0]->getContext(), modules,
+  if (!klee::loadFile(LibPath.str().str(), modules[0]->getContext(), modules,
                       error)) {
     klee_error("Could not load KLEE intrinsic file %s", LibPath.c_str());
   }
@@ -654,7 +657,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
     // not defined in this module; if it isn't resolvable then it
     // should be null.
     if (f->hasExternalWeakLinkage() &&
-        !externalDispatcher->resolveSymbol(f->getName())) {
+        !externalDispatcher->resolveSymbol(f->getName().str())) {
       addr = Expr::createPointer(0);
     } else {
       addr = Expr::createPointer(reinterpret_cast<std::uint64_t>(f));
@@ -752,7 +755,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
         if (i->getName() == "__dso_handle") {
           addr = &__dso_handle; // wtf ?
         } else {
-          addr = externalDispatcher->resolveSymbol(i->getName());
+          addr = externalDispatcher->resolveSymbol(i->getName().str());
         }
         if (!addr)
           klee_error("unable to load symbol(%s) while initializing globals.",
@@ -1787,6 +1790,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
           Expr::Width from = result->getWidth();
           Expr::Width to = getWidthForLLVMType(t);
 
+	  /*
           if (from != to) {
             CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) :
                            CallSite(cast<CallInst>(caller)));
@@ -1803,6 +1807,25 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
               result = ZExtExpr::create(result, to);
             }
           }
+	  */
+	  if (from != to) {
+  auto *CB = llvm::dyn_cast<llvm::CallBase>(caller);
+  assert(CB && "caller must be a call/invoke");
+
+  // Return attribute: sign/zero extension
+  bool isSExt = CB->hasRetAttr(llvm::Attribute::SExt);
+  bool isZExt = CB->hasRetAttr(llvm::Attribute::ZExt);
+
+  if (isSExt) {
+    result = SExtExpr::create(result, to);
+  } else if (isZExt) {
+    result = ZExtExpr::create(result, to);
+  } else {
+    // Keep your old behavior: default to ZExt if no SExt
+    result = ZExtExpr::create(result, to);
+  }
+}
+
           // return value is saved and bind in caller's state
           bindLocal(kcaller, state, result);
         }
@@ -2053,11 +2076,17 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Ignore debug intrinsic calls
     if (isa<DbgInfoIntrinsic>(i))
       break;
+    /*
     CallSite cs(i);
 
     unsigned numArgs = cs.arg_size();
     Value *fp = cs.getCalledValue();
     Function *f = getTargetFunction(fp, state);
+    */
+    auto *CB = llvm::cast<llvm::CallBase>(i);
+unsigned numArgs = CB->arg_size();
+llvm::Value *fp = CB->getCalledOperand();
+llvm::Function *f = getTargetFunction(fp, state);
 
     if (isa<InlineAsm>(fp)) {
       terminateStateOnExecError(state, "inline assembly is unsupported");
@@ -2095,7 +2124,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             if (from != to) {
               // XXX need to check other param attrs ?
 #if LLVM_VERSION_CODE >= LLVM_VERSION(5, 0)
-              bool isSExt = cs.paramHasAttr(i, llvm::Attribute::SExt);
+              //bool isSExt = cs.paramHasAttr(i, llvm::Attribute::SExt);
+	      bool isSExt = CB->paramHasAttr(i, llvm::Attribute::SExt);
+
 #else
               bool isSExt = cs.paramHasAttr(i+1, llvm::Attribute::SExt);
 #endif
@@ -2856,6 +2887,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     const llvm::VectorType *vt = iei->getType();
     unsigned EltBits = getWidthForLLVMType(vt->getElementType());
 
+    /*
     if (iIdx >= vt->getNumElements()) {
       // Out of bounds write
       terminateStateOnError(state, "Out of bounds write when inserting element",
@@ -2872,6 +2904,26 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       elems.push_back(
           of == iIdx ? newElt : ExtractExpr::create(vec, bitOffset, EltBits));
     }
+    */
+    // LLVM 13+: VectorType uses ElementCount
+const unsigned elementCount = vt->getElementCount().getKnownMinValue();
+
+if (iIdx >= elementCount) {
+  // Out of bounds write
+  terminateStateOnError(state, "Out of bounds write when inserting element",
+                        BadVectorAccess);
+  return;
+}
+
+llvm::SmallVector<ref<Expr>, 8> elems;
+elems.reserve(elementCount);
+for (unsigned i = elementCount; i != 0; --i) {
+  unsigned of = i - 1;
+  unsigned bitOffset = EltBits * of;
+  elems.push_back(
+      of == iIdx ? newElt : ExtractExpr::create(vec, bitOffset, EltBits));
+}
+
 
     assert(Context::get().isLittleEndian() && "FIXME:Broken for big endian");
     ref<Expr> Result = ConcatExpr::createN(elementCount, elems.data());
@@ -2894,12 +2946,22 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     const llvm::VectorType *vt = eei->getVectorOperandType();
     unsigned EltBits = getWidthForLLVMType(vt->getElementType());
 
+    /*
     if (iIdx >= vt->getNumElements()) {
       // Out of bounds read
       terminateStateOnError(state, "Out of bounds read when extracting element",
                             BadVectorAccess);
       return;
     }
+    */
+    const unsigned elementCount = vt->getElementCount().getKnownMinValue();
+    if (iIdx >= elementCount) {
+      // Out of bounds read
+      terminateStateOnError(state, "Out of bounds read when extracting element",
+                        BadVectorAccess);
+      return;
+    }
+
 
     unsigned bitOffset = EltBits * iIdx;
     ref<Expr> Result = ExtractExpr::create(vec, bitOffset, EltBits);
@@ -2965,7 +3027,7 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
       uint64_t addend = sl->getElementOffset((unsigned) ci->getZExtValue());
       constantOffset = constantOffset->Add(ConstantExpr::alloc(addend,
                                                                Context::get().getPointerWidth()));
-    } else if (const auto set = dyn_cast<SequentialType>(*ii)) {
+    } /* else if (const auto set = dyn_cast<SequentialType>(*ii)) {
       uint64_t elementSize =
         kmodule->targetData->getTypeStoreSize(set->getElementType());
       Value *operand = ii.getOperand();
@@ -2980,7 +3042,41 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
         kgepi->indices.push_back(std::make_pair(index, elementSize));
       }
 #if LLVM_VERSION_CODE >= LLVM_VERSION(4, 0)
-    } else if (const auto ptr = dyn_cast<PointerType>(*ii)) {
+    }*/
+    else if (const auto *AT = llvm::dyn_cast<llvm::ArrayType>(*ii)) {
+  uint64_t elementSize =
+      kmodule->targetData->getTypeStoreSize(AT->getElementType());
+  llvm::Value *operand = ii.getOperand();
+
+  if (llvm::Constant *c = llvm::dyn_cast<llvm::Constant>(operand)) {
+    ref<ConstantExpr> index =
+        evalConstant(c)->SExt(Context::get().getPointerWidth());
+    ref<ConstantExpr> addend =
+        index->Mul(ConstantExpr::alloc(elementSize,
+                                       Context::get().getPointerWidth()));
+    constantOffset = constantOffset->Add(addend);
+  } else {
+    kgepi->indices.push_back(std::make_pair(index, elementSize));
+  }
+
+} else if (const auto *VT = llvm::dyn_cast<llvm::VectorType>(*ii)) {
+  uint64_t elementSize =
+      kmodule->targetData->getTypeStoreSize(VT->getElementType());
+  llvm::Value *operand = ii.getOperand();
+
+  if (llvm::Constant *c = llvm::dyn_cast<llvm::Constant>(operand)) {
+    ref<ConstantExpr> index =
+        evalConstant(c)->SExt(Context::get().getPointerWidth());
+    ref<ConstantExpr> addend =
+        index->Mul(ConstantExpr::alloc(elementSize,
+                                       Context::get().getPointerWidth()));
+    constantOffset = constantOffset->Add(addend);
+  } else {
+    kgepi->indices.push_back(std::make_pair(index, elementSize));
+  }
+#if LLVM_VERSION_CODE >= LLVM_VERSION(4, 0)
+}
+    else if (const auto ptr = dyn_cast<PointerType>(*ii)) {
       auto elementSize =
         kmodule->targetData->getTypeStoreSize(ptr->getElementType());
       auto operand = ii.getOperand();
@@ -3400,7 +3496,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
 
   if (ExternalCalls == ExternalCallPolicy::None
-      && !okExternals.count(function->getName())) {
+      && !okExternals.count(function->getName().str())) {
     klee_warning("Disallowed call to external function: %s\n",
                function->getName().str().c_str());
     terminateStateOnError(state, "external calls disallowed", User);
@@ -4723,6 +4819,7 @@ size_t Executor::getAllocationAlignment(const llvm::Value *allocSite) const {
   const size_t forcedAlignment = 8;
   size_t alignment = 0;
   llvm::Type *type = NULL;
+  /*
   std::string allocationSiteName(allocSite->getName().str());
   if (const GlobalValue *GV = dyn_cast<GlobalValue>(allocSite)) {
     alignment = GV->getAlignment();
@@ -4745,7 +4842,7 @@ size_t Executor::getAllocationAlignment(const llvm::Value *allocSite) const {
                              ? CallSite(cast<InvokeInst>(allocSiteNonConst))
                              : CallSite(cast<CallInst>(allocSiteNonConst)));
     llvm::Function *fn =
-        klee::getDirectCallTarget(cs, /*moduleIsFullyLinked=*/true);
+        klee::getDirectCallTarget(cs, true);
     if (fn)
       allocationSiteName = fn->getName().str();
 
@@ -4757,6 +4854,48 @@ size_t Executor::getAllocationAlignment(const llvm::Value *allocSite) const {
   } else {
     llvm_unreachable("Unhandled allocation site");
   }
+ */
+std::string allocationSiteName(allocSite->getName().str());
+
+if (const llvm::GlobalValue *GV = llvm::dyn_cast<llvm::GlobalValue>(allocSite)) {
+  // Alignment on globals is available on GlobalObject in your LLVM 13 tree
+  alignment = 0;
+  if (const auto *GO = llvm::dyn_cast<llvm::GlobalObject>(GV)) {
+    alignment = GO->getAlignment(); // unsigned, 0 if unspecified
+  }
+
+  if (const llvm::GlobalVariable *globalVar =
+          llvm::dyn_cast<llvm::GlobalVariable>(GV)) {
+    // All GlobalVariables have pointer type
+    auto *ptrType = llvm::dyn_cast<llvm::PointerType>(globalVar->getType());
+    assert(ptrType && "globalVar's type is not a pointer");
+    type = ptrType->getElementType();
+  } else {
+    type = GV->getType();
+  }
+
+} else if (const llvm::AllocaInst *AI = llvm::dyn_cast<llvm::AllocaInst>(allocSite)) {
+  // LLVM 13: getAlign() returns Align
+  alignment = AI->getAlign().value();
+  type = AI->getAllocatedType();
+
+} else if (const auto *CB = llvm::dyn_cast<llvm::CallBase>(allocSite)) {
+  // FIXME: Model the semantics of the call to use the right alignment
+  llvm::Function *fn =
+      klee::getDirectCallTarget(*CB, /*moduleIsFullyLinked=*/true);
+  if (fn)
+    allocationSiteName = fn->getName().str();
+
+  klee_warning_once(fn ? fn : allocSite,
+                    "Alignment of memory from call \"%s\" is not "
+                    "modelled. Using alignment of %zu.",
+                    allocationSiteName.c_str(), forcedAlignment);
+
+  alignment = forcedAlignment;
+
+} else {
+  llvm_unreachable("Unhandled allocation site");
+}
 
   if (alignment == 0) {
     assert(type != NULL);

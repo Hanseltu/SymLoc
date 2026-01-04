@@ -23,6 +23,9 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Constants.h"
 
+#include "llvm/IR/Operator.h"
+#include "llvm/IR/Type.h"
+
 #include "klee/Config/Version.h"
 
 namespace klee {
@@ -64,6 +67,7 @@ class generic_gep_type_iterator
 
     llvm::Type *operator*() const { return CurTy; }
 
+    /*
     llvm::Type *getIndexedType() const {
       llvm::CompositeType *CT = cast<llvm::CompositeType>(CurTy);
       return CT->getTypeAtIndex(getOperand());
@@ -88,6 +92,58 @@ class generic_gep_type_iterator
       ++OpIt;
       return *this;
     }
+    */
+
+llvm::Type *getIndexedType() const {
+  llvm::Type *Ty = CurTy;
+  llvm::Value *Idx = getOperand();
+  if (!Ty) return nullptr;
+
+  if (auto *ST = llvm::dyn_cast<llvm::StructType>(Ty)) {
+    auto *CI = llvm::dyn_cast<llvm::ConstantInt>(Idx);
+    if (!CI) return nullptr; // struct GEP indices must be constant
+    unsigned FieldNo = static_cast<unsigned>(CI->getZExtValue());
+    if (FieldNo >= ST->getNumElements()) return nullptr;
+    return ST->getElementType(FieldNo);
+  }
+
+  if (auto *AT = llvm::dyn_cast<llvm::ArrayType>(Ty)) {
+    (void)Idx; // index value doesn't affect element type
+    return AT->getElementType();
+  }
+
+#if LLVM_VERSION_CODE >= LLVM_VERSION(11, 0)
+  if (auto *VT = llvm::dyn_cast<llvm::VectorType>(Ty)) {
+    (void)Idx;
+    return VT->getElementType();
+  }
+#else
+  if (auto *VT = llvm::dyn_cast<llvm::VectorType>(Ty)) {
+    (void)Idx;
+    return VT->getElementType();
+  }
+#endif
+
+  if (auto *PT = llvm::dyn_cast<llvm::PointerType>(Ty)) {
+    (void)Idx;
+    return PT->getElementType(); // OK for LLVM 13 typed pointers
+  }
+
+  return nullptr;
+}
+
+// This is a non-standard operator->.  It allows you to call methods on the
+// current type directly.
+llvm::Type *operator->() const { return operator*(); }
+
+llvm::Value *getOperand() const { return asValue(*OpIt); }
+
+generic_gep_type_iterator &operator++() { // Preincrement
+  CurTy = getIndexedType();
+  ++OpIt;
+  return *this;
+}
+
 
     generic_gep_type_iterator operator++(int) { // Postincrement
       generic_gep_type_iterator tmp = *this; ++*this; return tmp;

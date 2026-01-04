@@ -454,7 +454,7 @@ void KleeHandler::setInterpreter(Interpreter *i) {
 std::string KleeHandler::getOutputFilename(const std::string &filename) {
   SmallString<128> path = m_outputDirectory;
   sys::path::append(path,filename);
-  return path.str();
+  return path.str().str();
 }
 
 std::unique_ptr<llvm::raw_fd_ostream>
@@ -763,7 +763,7 @@ std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
 
   KLEE_DEBUG_WITH_TYPE("klee_runtime", llvm::dbgs() <<
                        libDir.c_str() << "\n");
-  return libDir.str();
+  return libDir.str().str();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1005,11 +1005,21 @@ void externalsAndGlobalsCheck(const llvm::Module *m) {
       for (BasicBlock::const_iterator it = bbIt->begin(), ie = bbIt->end();
            it != ie; ++it) {
         if (const CallInst *ci = dyn_cast<CallInst>(it)) {
-          if (isa<InlineAsm>(ci->getCalledValue())) {
+        
+	/*	
+	if (isa<InlineAsm>(ci->getCalledValue())) {
             klee_warning_once(&*fnIt,
                               "function \"%s\" has inline asm",
                               fnIt->getName().data());
           }
+	 */
+	llvm::Value *callee = ci->getCalledOperand()->stripPointerCasts();
+	if (isa<llvm::InlineAsm>(callee)) {
+  	klee_warning_once(&*fnIt,
+           "function \"%s\" has inline asm",
+            fnIt->getName().data());
+	}
+
         }
       }
     }
@@ -1026,7 +1036,7 @@ void externalsAndGlobalsCheck(const llvm::Module *m) {
          it = m->alias_begin(), ie = m->alias_end();
        it != ie; ++it) {
     std::map<std::string, bool>::iterator it2 =
-      externals.find(it->getName());
+      externals.find(it->getName().str());
     if (it2!=externals.end())
       externals.erase(it2);
   }
@@ -1225,8 +1235,8 @@ linkWithUclibc(StringRef libDir,
 int main(int argc, char **argv, char **envp) {
   atexit(llvm_shutdown);  // Call llvm_shutdown() on exit.
   klee_message("This is a debuging version of KLEE\n");
-  KCommandLine::HideOptions(llvm::cl::GeneralCategory);
-
+  //KCommandLine::HideOptions(llvm::cl::GeneralCategory);
+  KCommandLine::HideOptions(llvm::cl::getGeneralCategory());
   llvm::InitializeNativeTarget();
 
   parseArguments(argc, argv);

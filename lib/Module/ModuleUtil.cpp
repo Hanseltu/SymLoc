@@ -82,11 +82,11 @@ GetAllUndefinedSymbols(Module *M, std::set<std::string> &UndefinedSymbols) {
   for (auto const &Function : *M) {
     if (Function.hasName()) {
       if (Function.isDeclaration())
-        UndefinedSymbols.insert(Function.getName());
+        UndefinedSymbols.insert(Function.getName().str());
       else if (!Function.hasLocalLinkage()) {
         assert(!Function.hasDLLImportStorageClass() &&
                "Found dllimported non-external symbol!");
-        DefinedSymbols.insert(Function.getName());
+        DefinedSymbols.insert(Function.getName().str());
       }
     }
   }
@@ -95,17 +95,17 @@ GetAllUndefinedSymbols(Module *M, std::set<std::string> &UndefinedSymbols) {
        I != E; ++I)
     if (I->hasName()) {
       if (I->isDeclaration())
-        UndefinedSymbols.insert(I->getName());
+        UndefinedSymbols.insert(I->getName().str());
       else if (!I->hasLocalLinkage()) {
         assert(!I->hasDLLImportStorageClass() && "Found dllimported non-external symbol!");
-        DefinedSymbols.insert(I->getName());
+        DefinedSymbols.insert(I->getName().str());
       }
     }
 
   for (Module::const_alias_iterator I = M->alias_begin(), E = M->alias_end();
        I != E; ++I)
     if (I->hasName())
-      DefinedSymbols.insert(I->getName());
+      DefinedSymbols.insert(I->getName().str());
 
 
   // Prune out any defined symbols from the undefined symbols set
@@ -251,6 +251,7 @@ klee::linkModules(std::vector<std::unique_ptr<llvm::Module>> &modules,
   return composite;
 }
 
+/*
 Function *klee::getDirectCallTarget(CallSite cs, bool moduleIsFullyLinked) {
   Value *v = cs.getCalledValue();
   bool viaConstantExpr = false;
@@ -284,7 +285,64 @@ Function *klee::getDirectCallTarget(CallSite cs, bool moduleIsFullyLinked) {
          "FIXME: Unresolved direct target for a constant expression");
   return NULL;
 }
+*/
 
+
+llvm::Function *klee::getDirectCallTarget(const llvm::CallBase &CB,
+                                          bool moduleIsFullyLinked) {
+  llvm::Value *v = CB.getCalledOperand();
+  bool viaConstantExpr = false;
+
+  while (v) {
+    // Handle bitcasts/geps/etc. on function pointers
+    v = v->stripPointerCasts();
+
+    // Direct function?
+    if (auto *f = llvm::dyn_cast<llvm::Function>(v)) {
+      return f;
+    }
+
+    // Inline asm is not a Function target
+    if (llvm::isa<llvm::InlineAsm>(v)) {
+      return nullptr;
+    }
+
+    // Global alias: try to resolve to its base object if not interposable
+    if (auto *ga = llvm::dyn_cast<llvm::GlobalAlias>(v)) {
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
+      if (moduleIsFullyLinked || !ga->isInterposable()) {
+        v = ga->getBaseObject(); // (your LLVM tree has this, not getAliaseeObject)
+      } else {
+        v = nullptr;
+      }
+#else
+      if (moduleIsFullyLinked || !(ga->mayBeOverridden())) {
+        v = ga->getAliasee();
+      } else {
+        v = nullptr;
+      }
+#endif
+      continue;
+    }
+
+    // ConstantExpr (legacy): keep old behavior and assert if unresolved
+    if (auto *ce = llvm::dyn_cast<llvm::ConstantExpr>(v)) {
+      viaConstantExpr = true;
+      v = ce->getOperand(0);
+      continue;
+    }
+
+    // Otherwise: indirect/unhandled
+    v = nullptr;
+  }
+
+  (void)viaConstantExpr;
+  assert((!viaConstantExpr) &&
+         "FIXME: Unresolved direct target for a constant expression");
+  return nullptr;
+}
+
+/*
 static bool valueIsOnlyCalled(const Value *v) {
   for (auto user : v->users()) {
     if (const auto *instr = dyn_cast<Instruction>(user)) {
@@ -314,6 +372,51 @@ static bool valueIsOnlyCalled(const Value *v) {
 
   return true;
 }
+*/
+
+static bool valueIsOnlyCalled(const llvm::Value *v) {
+  for (const llvm::User *user : v->users()) {
+    if (const auto *instr = llvm::dyn_cast<llvm::Instruction>(user)) {
+      // Must be a call/invoke (LLVM13: both are CallBase)
+      const auto *CB = llvm::dyn_cast<llvm::CallBase>(instr);
+      if (!CB)
+        return false;
+
+      // v must be used as the callee, not in any other position.
+      // (Old CallSite version implicitly relied on this.)
+      if (CB->getCalledOperand() != v)
+        return false;
+
+      // And it must not appear as an argument
+      for (unsigned i = 0, e = CB->arg_size(); i < e; ++i) {
+        if (CB->getArgOperand(i) == v)
+          return false;
+      }
+
+    } else if (const auto *ce = llvm::dyn_cast<llvm::ConstantExpr>(user)) {
+      if (ce->getOpcode() == llvm::Instruction::BitCast) {
+        if (valueIsOnlyCalled(ce))
+          continue;
+      }
+      return false;
+
+    } else if (const auto *ga = llvm::dyn_cast<llvm::GlobalAlias>(user)) {
+      // If v is the aliasee, then the alias itself must also only be called.
+      if (ga->getAliasee() == v && !valueIsOnlyCalled(ga))
+        return false;
+
+    } else if (llvm::isa<llvm::BlockAddress>(user)) {
+      // only valid as operand to indirectbr or comparison against null
+      continue;
+
+    } else {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 
 bool klee::functionEscapes(const Function *f) {
   return !valueIsOnlyCalled(f);

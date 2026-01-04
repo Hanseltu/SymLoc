@@ -389,7 +389,9 @@ static bool printInputAsSMTLIBv2(const char *Filename,
 
 int main(int argc, char **argv) {
 
-  KCommandLine::HideOptions(llvm::cl::GeneralCategory);
+  //KCommandLine::HideOptions(llvm::cl::GeneralCategory);
+  KCommandLine::HideOptions(llvm::cl::getGeneralCategory());
+
 
   bool success = true;
 

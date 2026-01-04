@@ -369,8 +369,13 @@ void ConstantExpr::toMemory(void *address) {
   }
 }
 
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringRef.h"
 void ConstantExpr::toString(std::string &Res, unsigned radix) const {
-  Res = value.toString(radix, false);
+  //Res = value.toString(radix, false);
+  llvm::SmallString<40> S;
+  value.toString(S, radix, /*Signed=*/false);
+  Res = std::string(S.c_str(), S.size());
 }
 
 ref<ConstantExpr> ConstantExpr::Concat(const ref<ConstantExpr> &RHS) {
