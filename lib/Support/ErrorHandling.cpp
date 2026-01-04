@@ -31,7 +31,7 @@ static const char *warningOncePrefix = "WARNING ONCE";
 static const char *errorPrefix = "ERROR";
 static const char *notePrefix = "NOTE";
 
-namespace {
+namespace klee {
 cl::OptionCategory MiscCat("Miscellaneous options", "");
 cl::opt<bool> WarningsOnlyToFile(
     "warnings-only-to-file", cl::init(false),

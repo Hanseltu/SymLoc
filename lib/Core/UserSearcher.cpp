@@ -21,7 +21,7 @@
 using namespace llvm;
 using namespace klee;
 
-namespace {
+namespace klee {
 llvm::cl::OptionCategory
     SearchCat("Search options", "These options control the search heuristic.");
 

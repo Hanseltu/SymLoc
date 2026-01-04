@@ -25,6 +25,10 @@
 #include "klee/Solver/SolverCmdLine.h"
 #include "klee/Statistics.h"
 
+#include "klee/Internal/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
+#include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
@@ -35,19 +39,19 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Errno.h"
 #include "llvm/Support/FileSystem.h"
+#if LLVM_VERSION_CODE >= LLVM_VERSION(16, 0)
+#include "llvm/TargetParser/Host.h"
+#else
+#include "llvm/Support/Host.h"
+#endif
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/Signals.h"
-
-#if LLVM_VERSION_CODE >= LLVM_VERSION(4, 0)
-#include <llvm/Bitcode/BitcodeReader.h>
-#else
-#include <llvm/Bitcode/ReaderWriter.h>
-#endif
+#include "llvm/Support/TargetSelect.h"
+DISABLE_WARNING_POP
 
 #include <dirent.h>
 #include <signal.h>
@@ -1213,10 +1217,10 @@ int main(int argc, char **argv, char **envp) {
   atexit(llvm_shutdown);  // Call llvm_shutdown() on exit.
   klee_message("This is a debuging version of KLEE\n");
    KCommandLine::KeepOnlyCategories(
-     {&ChecksCat,      &DebugCat,    /*&ExtCallsCat,*/ &ExprCat,     &LinkCat,
-      /*&MemoryCat,*/      &MergeCat,    /*&MiscCat,*/     &ModuleCat,   &ReplayCat,
-      /*&SearchCat,*/      &SeedingCat,  &SolvingCat,  &StartCat,    /*&StatsCat,*/
-      &TerminationCat, &TestCaseCat, &TestGenCat /*&ExecTreeCat,*/ /*&ExecTreeCat*/});
+     {&ChecksCat,      &DebugCat,    &ExtCallsCat, &ExprCat,     &LinkCat,
+      &MemoryCat,      &MergeCat,    &MiscCat,     &ModuleCat,   &ReplayCat,
+      &SearchCat,      &SeedingCat,  &SolvingCat,  &StartCat,    &StatsCat,
+      &TerminationCat, &TestCaseCat, &TestGenCat /*&ExecTreeCat,*/ /*&ExecTreeCat*/}); // DIFFERENT
 
   llvm::InitializeNativeTarget();
 
