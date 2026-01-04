@@ -18,10 +18,14 @@
 #ifndef KLEE_GETELEMENTPTRTYPEITERATOR_H
 #define KLEE_GETELEMENTPTRTYPEITERATOR_H
 
+#include "klee/Internal/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/User.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Constants.h"
+DISABLE_WARNING_POP
 
 #include "klee/Config/Version.h"
 
@@ -65,8 +69,7 @@ class generic_gep_type_iterator
     llvm::Type *operator*() const { return CurTy; }
 
     llvm::Type *getIndexedType() const {
-      llvm::CompositeType *CT = cast<llvm::CompositeType>(CurTy);
-      return CT->getTypeAtIndex(getOperand());
+      return llvm::GetElementPtrInst::getTypeAtIndex(CurTy, getOperand());
     }
 
     // This is a non-standard operator->.  It allows you to call methods on the
@@ -76,12 +79,11 @@ class generic_gep_type_iterator
     llvm::Value *getOperand() const { return asValue(*OpIt); }
 
     generic_gep_type_iterator& operator++() {   // Preincrement
-      if (llvm::CompositeType *CT = dyn_cast<llvm::CompositeType>(CurTy)) {
-        CurTy = CT->getTypeAtIndex(getOperand());
-#if LLVM_VERSION_CODE >= LLVM_VERSION(4, 0)
-      } else if (auto ptr = dyn_cast<llvm::PointerType>(CurTy)) {
-        CurTy = ptr->getElementType();
-#endif
+      if (isa<llvm::StructType>(CurTy) || isa<llvm::ArrayType>(CurTy) ||
+          isa<llvm::VectorType>(CurTy)) {
+        CurTy = llvm::GetElementPtrInst::getTypeAtIndex(CurTy, getOperand());
+      } else if (CurTy->isPointerTy()) {
+        CurTy = CurTy->getPointerElementType();
       } else {
         CurTy = 0;
       }

@@ -15,10 +15,17 @@
 #ifndef KLEE_SOLVERCMDLINE_H
 #define KLEE_SOLVERCMDLINE_H
 
-#include "klee/Config/config.h"
 
+#include "klee/Config/config.h"
+#include "klee/Internal/Support/CompilerWarning.h"
+
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/CommandLine.h"
+DISABLE_WARNING_POP
+
+#include <set>
 
 namespace klee {
 
@@ -82,11 +89,10 @@ extern llvm::cl::opt<klee::MetaSMTBackendType> MetaSMTBackend;
 
 class KCommandLine {
 public:
-  /// Hide all options in the specified category
-  static void HideOptions(llvm::cl::OptionCategory &Category);
-
-  /// Hide all options except the ones in the specified category
-  static void HideUnrelatedOptions(llvm::cl::OptionCategory &Category);
+  /// Keep only the options in the provided categories,
+  /// together with --help, --help-list, --version and --color
+  static void
+  KeepOnlyCategories(std::set<llvm::cl::OptionCategory *> const &categories);
 };
 } // namespace klee
 

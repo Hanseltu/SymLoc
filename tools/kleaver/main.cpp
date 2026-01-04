@@ -32,7 +32,7 @@
 
 #include <sys/stat.h>
 #include <unistd.h>
-
+#include <utility>
 
 #include "llvm/Support/Signals.h"
 
@@ -389,7 +389,7 @@ static bool printInputAsSMTLIBv2(const char *Filename,
 
 int main(int argc, char **argv) {
 
-  KCommandLine::HideOptions(llvm::cl::GeneralCategory);
+  KCommandLine::KeepOnlyCategories({&ExprCat, &SolvingCat});
 
   bool success = true;
 
