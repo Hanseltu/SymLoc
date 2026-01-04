@@ -1814,14 +1814,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
           
             // Return attribute: sign/zero extension
             bool isSExt = CB->hasRetAttr(llvm::Attribute::SExt);
-            bool isZExt = CB->hasRetAttr(llvm::Attribute::ZExt);
-          
+
             if (isSExt) {
               result = SExtExpr::create(result, to);
-            } else if (isZExt) {
-              result = ZExtExpr::create(result, to);
             } else {
-              // Keep your old behavior: default to ZExt if no SExt
+              // Keep old behavior: default to ZExt if no SExt
               result = ZExtExpr::create(result, to);
             }
           }
