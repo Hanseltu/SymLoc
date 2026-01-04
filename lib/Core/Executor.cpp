@@ -1808,23 +1808,23 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             }
           }
 	  */
-	  if (from != to) {
-  auto *CB = llvm::dyn_cast<llvm::CallBase>(caller);
-  assert(CB && "caller must be a call/invoke");
-
-  // Return attribute: sign/zero extension
-  bool isSExt = CB->hasRetAttr(llvm::Attribute::SExt);
-  bool isZExt = CB->hasRetAttr(llvm::Attribute::ZExt);
-
-  if (isSExt) {
-    result = SExtExpr::create(result, to);
-  } else if (isZExt) {
-    result = ZExtExpr::create(result, to);
-  } else {
-    // Keep your old behavior: default to ZExt if no SExt
-    result = ZExtExpr::create(result, to);
-  }
-}
+          if (from != to) {
+            auto *CB = llvm::dyn_cast<llvm::CallBase>(caller);
+            assert(CB && "caller must be a call/invoke");
+          
+            // Return attribute: sign/zero extension
+            bool isSExt = CB->hasRetAttr(llvm::Attribute::SExt);
+            bool isZExt = CB->hasRetAttr(llvm::Attribute::ZExt);
+          
+            if (isSExt) {
+              result = SExtExpr::create(result, to);
+            } else if (isZExt) {
+              result = ZExtExpr::create(result, to);
+            } else {
+              // Keep your old behavior: default to ZExt if no SExt
+              result = ZExtExpr::create(result, to);
+            }
+          }
 
           // return value is saved and bind in caller's state
           bindLocal(kcaller, state, result);
@@ -2084,9 +2084,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     Function *f = getTargetFunction(fp, state);
     */
     auto *CB = llvm::cast<llvm::CallBase>(i);
-unsigned numArgs = CB->arg_size();
-llvm::Value *fp = CB->getCalledOperand();
-llvm::Function *f = getTargetFunction(fp, state);
+    unsigned numArgs = CB->arg_size();
+    llvm::Value *fp = CB->getCalledOperand();
+    llvm::Function *f = getTargetFunction(fp, state);
 
     if (isa<InlineAsm>(fp)) {
       terminateStateOnExecError(state, "inline assembly is unsupported");
@@ -2125,7 +2125,7 @@ llvm::Function *f = getTargetFunction(fp, state);
               // XXX need to check other param attrs ?
 #if LLVM_VERSION_CODE >= LLVM_VERSION(5, 0)
               //bool isSExt = cs.paramHasAttr(i, llvm::Attribute::SExt);
-	      bool isSExt = CB->paramHasAttr(i, llvm::Attribute::SExt);
+	            bool isSExt = CB->paramHasAttr(i, llvm::Attribute::SExt);
 
 #else
               bool isSExt = cs.paramHasAttr(i+1, llvm::Attribute::SExt);
@@ -2906,23 +2906,23 @@ llvm::Function *f = getTargetFunction(fp, state);
     }
     */
     // LLVM 13+: VectorType uses ElementCount
-const unsigned elementCount = vt->getElementCount().getKnownMinValue();
+    const unsigned elementCount = vt->getElementCount().getKnownMinValue();
 
-if (iIdx >= elementCount) {
-  // Out of bounds write
-  terminateStateOnError(state, "Out of bounds write when inserting element",
-                        BadVectorAccess);
-  return;
-}
+    if (iIdx >= elementCount) {
+      // Out of bounds write
+      terminateStateOnError(state, "Out of bounds write when inserting element",
+                            BadVectorAccess);
+      return;
+    }
 
-llvm::SmallVector<ref<Expr>, 8> elems;
-elems.reserve(elementCount);
-for (unsigned i = elementCount; i != 0; --i) {
-  unsigned of = i - 1;
-  unsigned bitOffset = EltBits * of;
-  elems.push_back(
-      of == iIdx ? newElt : ExtractExpr::create(vec, bitOffset, EltBits));
-}
+    llvm::SmallVector<ref<Expr>, 8> elems;
+    elems.reserve(elementCount);
+    for (unsigned i = elementCount; i != 0; --i) {
+      unsigned of = i - 1;
+      unsigned bitOffset = EltBits * of;
+      elems.push_back(
+          of == iIdx ? newElt : ExtractExpr::create(vec, bitOffset, EltBits));
+    }
 
 
     assert(Context::get().isLittleEndian() && "FIXME:Broken for big endian");
@@ -4855,47 +4855,47 @@ size_t Executor::getAllocationAlignment(const llvm::Value *allocSite) const {
     llvm_unreachable("Unhandled allocation site");
   }
  */
-std::string allocationSiteName(allocSite->getName().str());
+  std::string allocationSiteName(allocSite->getName().str());
 
-if (const llvm::GlobalValue *GV = llvm::dyn_cast<llvm::GlobalValue>(allocSite)) {
-  // Alignment on globals is available on GlobalObject in your LLVM 13 tree
-  alignment = 0;
-  if (const auto *GO = llvm::dyn_cast<llvm::GlobalObject>(GV)) {
-    alignment = GO->getAlignment(); // unsigned, 0 if unspecified
-  }
+  if (const llvm::GlobalValue *GV = llvm::dyn_cast<llvm::GlobalValue>(allocSite)) {
+    // Alignment on globals is available on GlobalObject in your LLVM 13 tree
+    alignment = 0;
+    if (const auto *GO = llvm::dyn_cast<llvm::GlobalObject>(GV)) {
+      alignment = GO->getAlignment(); // unsigned, 0 if unspecified
+    }
 
-  if (const llvm::GlobalVariable *globalVar =
-          llvm::dyn_cast<llvm::GlobalVariable>(GV)) {
-    // All GlobalVariables have pointer type
-    auto *ptrType = llvm::dyn_cast<llvm::PointerType>(globalVar->getType());
-    assert(ptrType && "globalVar's type is not a pointer");
-    type = ptrType->getElementType();
+    if (const llvm::GlobalVariable *globalVar =
+            llvm::dyn_cast<llvm::GlobalVariable>(GV)) {
+      // All GlobalVariables have pointer type
+      auto *ptrType = llvm::dyn_cast<llvm::PointerType>(globalVar->getType());
+      assert(ptrType && "globalVar's type is not a pointer");
+      type = ptrType->getElementType();
+    } else {
+      type = GV->getType();
+    }
+
+  } else if (const llvm::AllocaInst *AI = llvm::dyn_cast<llvm::AllocaInst>(allocSite)) {
+    // LLVM 13: getAlign() returns Align
+    alignment = AI->getAlign().value();
+    type = AI->getAllocatedType();
+
+  } else if (const auto *CB = llvm::dyn_cast<llvm::CallBase>(allocSite)) {
+    // FIXME: Model the semantics of the call to use the right alignment
+    llvm::Function *fn =
+        klee::getDirectCallTarget(*CB, /*moduleIsFullyLinked=*/true);
+    if (fn)
+      allocationSiteName = fn->getName().str();
+
+    klee_warning_once(fn ? fn : allocSite,
+                      "Alignment of memory from call \"%s\" is not "
+                      "modelled. Using alignment of %zu.",
+                      allocationSiteName.c_str(), forcedAlignment);
+    
+    alignment = forcedAlignment;
+    
   } else {
-    type = GV->getType();
+    llvm_unreachable("Unhandled allocation site");
   }
-
-} else if (const llvm::AllocaInst *AI = llvm::dyn_cast<llvm::AllocaInst>(allocSite)) {
-  // LLVM 13: getAlign() returns Align
-  alignment = AI->getAlign().value();
-  type = AI->getAllocatedType();
-
-} else if (const auto *CB = llvm::dyn_cast<llvm::CallBase>(allocSite)) {
-  // FIXME: Model the semantics of the call to use the right alignment
-  llvm::Function *fn =
-      klee::getDirectCallTarget(*CB, /*moduleIsFullyLinked=*/true);
-  if (fn)
-    allocationSiteName = fn->getName().str();
-
-  klee_warning_once(fn ? fn : allocSite,
-                    "Alignment of memory from call \"%s\" is not "
-                    "modelled. Using alignment of %zu.",
-                    allocationSiteName.c_str(), forcedAlignment);
-
-  alignment = forcedAlignment;
-
-} else {
-  llvm_unreachable("Unhandled allocation site");
-}
 
   if (alignment == 0) {
     assert(type != NULL);

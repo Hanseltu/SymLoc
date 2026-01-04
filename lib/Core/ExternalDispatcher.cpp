@@ -270,12 +270,12 @@ Function *ExternalDispatcherImpl::createDispatcher(Function *target,
   Value **args = new Value *[cs.arg_size()];
   */
   llvm::CallBase *CB = nullptr;
-if (inst->getOpcode() == llvm::Instruction::Call)
-  CB = llvm::cast<llvm::CallInst>(inst);
-else
-  CB = llvm::cast<llvm::InvokeInst>(inst);
+  if (inst->getOpcode() == llvm::Instruction::Call)
+    CB = llvm::cast<llvm::CallInst>(inst);
+  else
+    CB = llvm::cast<llvm::InvokeInst>(inst);
 
-llvm::Value **args = new llvm::Value *[CB->arg_size()];
+  llvm::Value **args = new llvm::Value *[CB->arg_size()];
 
   std::vector<Type *> nullary;
 
@@ -324,27 +324,27 @@ llvm::Value **args = new llvm::Value *[CB->arg_size()];
   }
   */
   // Each argument will be passed by writing it into gTheArgsP[i].
-unsigned i = 0, idx = 2;
-for (unsigned ae = CB->arg_size(); i != ae; ++i) {
-  llvm::Value *ArgV = CB->getArgOperand(i);
-
-  // Determine the type the argument will be passed as. This accommodates for
-  // the corresponding code in Executor.cpp for handling calls to bitcasted
-  // functions.
-  llvm::Type *argTy =
-      (i < FTy->getNumParams() ? FTy->getParamType(i) : ArgV->getType());
-
-  llvm::Value *argI64p =
-      Builder.CreateGEP(llvm::Type::getInt64Ty(ctx), argI64s,
-                        llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), idx));
-
-  llvm::Value *argp =
-      Builder.CreateBitCast(argI64p, llvm::PointerType::getUnqual(argTy));
-  args[i] = Builder.CreateLoad(argTy, argp);
-
-  unsigned argSize = argTy->getPrimitiveSizeInBits();
-  idx += ((argSize ? argSize : 64) + 63) / 64;
-}
+  unsigned i = 0, idx = 2;
+  for (unsigned ae = CB->arg_size(); i != ae; ++i) {
+    llvm::Value *ArgV = CB->getArgOperand(i);
+  
+    // Determine the type the argument will be passed as. This accommodates for
+    // the corresponding code in Executor.cpp for handling calls to bitcasted
+    // functions.
+    llvm::Type *argTy =
+        (i < FTy->getNumParams() ? FTy->getParamType(i) : ArgV->getType());
+  
+    llvm::Value *argI64p =
+        Builder.CreateGEP(llvm::Type::getInt64Ty(ctx), argI64s,
+                          llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), idx));
+  
+    llvm::Value *argp =
+        Builder.CreateBitCast(argI64p, llvm::PointerType::getUnqual(argTy));
+    args[i] = Builder.CreateLoad(argTy, argp);
+  
+    unsigned argSize = argTy->getPrimitiveSizeInBits();
+    idx += ((argSize ? argSize : 64) + 63) / 64;
+  }
 
 
   auto dispatchTarget = module->getOrInsertFunction(target->getName(), FTy,

@@ -494,26 +494,26 @@ KFunction::KFunction(llvm::Function *_function,
       }
       */
       if (auto *CB = llvm::dyn_cast<llvm::CallBase>(inst)) {
-  	unsigned numArgs = CB->arg_size();
-  	ki->operands = new int[numArgs + 1];
-
-  	// Old: cs.getCalledValue()
-  	// New: CB->getCalledOperand()
-  	ki->operands[0] = getOperandNum(CB->getCalledOperand(), registerMap, km, ki);
-
-  	// Old: cs.getArgument(j)
-  	// New: CB->getArgOperand(j)
-  	for (unsigned j = 0; j < numArgs; ++j) {
-    	  Value *v = CB->getArgOperand(j);
-    	  ki->operands[j + 1] = getOperandNum(v, registerMap, km, ki);
-  	}
-       } else {
-  	unsigned numOperands = it->getNumOperands();
-  	ki->operands = new int[numOperands];
-  	for (unsigned j = 0; j < numOperands; ++j) {
-    	  Value *v = it->getOperand(j);
-    	  ki->operands[j] = getOperandNum(v, registerMap, km, ki);
-  	}
+      	unsigned numArgs = CB->arg_size();
+      	ki->operands = new int[numArgs + 1];
+      
+      	// Old: cs.getCalledValue()
+      	// New: CB->getCalledOperand()
+      	ki->operands[0] = getOperandNum(CB->getCalledOperand(), registerMap, km, ki);
+      
+      	// Old: cs.getArgument(j)
+      	// New: CB->getArgOperand(j)
+      	for (unsigned j = 0; j < numArgs; ++j) {
+        	  Value *v = CB->getArgOperand(j);
+        	  ki->operands[j + 1] = getOperandNum(v, registerMap, km, ki);
+      	}
+           } else {
+      	unsigned numOperands = it->getNumOperands();
+      	ki->operands = new int[numOperands];
+      	for (unsigned j = 0; j < numOperands; ++j) {
+        	  Value *v = it->getOperand(j);
+        	  ki->operands[j] = getOperandNum(v, registerMap, km, ki);
+      	}
       }
 
       instructions[i++] = ki;

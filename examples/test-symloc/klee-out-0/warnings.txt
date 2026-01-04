@@ -6,7 +6,7 @@ KLEE: WARNING: undefined reference to function: llvm.dbg.label
 KLEE: WARNING: undefined reference to function: open
 KLEE: WARNING: undefined reference to function: write
 KLEE: WARNING: undefined reference to function: kill (UNSAFE)!
-KLEE: WARNING ONCE: calling external: ioctl(0, 21505, 178937344) at libc/termios/tcgetattr.c:43 12
+KLEE: WARNING ONCE: calling external: ioctl(0, 21505, 568983040) at libc/termios/tcgetattr.c:43 12
 KLEE: WARNING ONCE: calling __user_main with extra arguments.
 KLEE: WARNING ONCE: Alignment of memory from call "malloc" is not modelled. Using alignment of 8.
-KLEE: WARNING ONCE: calling external: printf(162711600) at case.c:17 5
+KLEE: WARNING ONCE: calling external: printf(552757296) at case.c:17 5

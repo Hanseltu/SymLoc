@@ -813,23 +813,23 @@ void StatsTracker::computeReachableUncovered() {
             }
           }
 	*/
-	  if (auto *CB = llvm::dyn_cast<llvm::CallBase>(inst)) {
-  llvm::Value *callee = CB->getCalledOperand()->stripPointerCasts();
-
-  if (llvm::isa<llvm::InlineAsm>(callee)) {
-    // We can never call through here so assume no targets
-    // (which should be correct anyhow).
-    callTargets.insert(std::make_pair(inst, std::vector<llvm::Function*>()));
-  } else if (llvm::Function *target =
-                 getDirectCallTarget(*CB, /*moduleIsFullyLinked=*/true)) {
-    callTargets[inst].push_back(target);
-  } else {
-    callTargets[inst] =
-        std::vector<llvm::Function*>(km->escapingFunctions.begin(),
-                                     km->escapingFunctions.end());
-  }
-}
-
+            if (auto *CB = llvm::dyn_cast<llvm::CallBase>(inst)) {
+              llvm::Value *callee = CB->getCalledOperand()->stripPointerCasts();
+            
+              if (llvm::isa<llvm::InlineAsm>(callee)) {
+                // We can never call through here so assume no targets
+                // (which should be correct anyhow).
+                callTargets.insert(std::make_pair(inst, std::vector<llvm::Function*>()));
+              } else if (llvm::Function *target =
+                             getDirectCallTarget(*CB, /*moduleIsFullyLinked=*/true)) {
+                callTargets[inst].push_back(target);
+              } else {
+                callTargets[inst] =
+                    std::vector<llvm::Function*>(km->escapingFunctions.begin(),
+                                                 km->escapingFunctions.end());
+              }
+            }
+            
         }
       }
     }

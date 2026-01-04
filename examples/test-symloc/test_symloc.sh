@@ -9,6 +9,6 @@ clang -g -emit-llvm -c case.c
 llvm-dis case.bc
 
 # execute klee
-../../../build-symloc/bin/symloc -libc=uclibc case.bc
+../../../build-symloc/bin/klee -libc=uclibc case.bc
 #klee --write-kqueries --write-smt2s --write-cvcs --write-paths --write-sym-paths --write-cov --write-test-info \
     #-libc=uclibc -posix-runtime -max-time=30s  case.bc
