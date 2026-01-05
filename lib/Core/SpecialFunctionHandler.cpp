@@ -31,6 +31,8 @@
 #include <errno.h>
 #include <sstream>
 #include <random>
+#include <cstdint>
+
 using namespace llvm;
 using namespace klee;
 
