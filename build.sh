@@ -4,6 +4,7 @@ cd ../build-symloc
 export CC=clang
 export CXX=clang++
 cmake \
+    -DBUILDING_TYPE=Debug \
     -DENABLE_SOLVER_STP=ON \
     -DENABLE_POSIX_RUNTIME=ON \
     -DENABLE_KLEE_UCLIBC=ON \
