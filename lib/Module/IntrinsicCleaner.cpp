@@ -9,7 +9,13 @@
 
 #include "Passes.h"
 
+
 #include "klee/Config/Version.h"
+#include "klee/Internal/Support/ErrorHandling.h"
+
+#include "klee/Internal/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/IR/Constants.h"
@@ -20,11 +26,13 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicsX86.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
+DISABLE_WARNING_POP
 
 using namespace llvm;
 
@@ -74,31 +82,46 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
         Value *dst = ii->getArgOperand(0);
         Value *src = ii->getArgOperand(1);
 
-        if (WordSize == 4) {
+         if (WordSize == 4) {
           Type *i8pp = PointerType::getUnqual(
               PointerType::getUnqual(Type::getInt8Ty(ctx)));
           auto castedDst =
               Builder.CreatePointerCast(dst, i8pp, "vacopy.cast.dst");
           auto castedSrc =
               Builder.CreatePointerCast(src, i8pp, "vacopy.cast.src");
-          auto load = Builder.CreateLoad(castedSrc, "vacopy.read");
+#if LLVM_VERSION_CODE >= LLVM_VERSION(15, 0)
+          auto load = Builder.CreateLoad(Builder.getPtrTy(), castedSrc,
+                                         "vacopy.read");
+#else
+          auto load =
+              Builder.CreateLoad(castedSrc->getType()->getPointerElementType(),
+                                 castedSrc, "vacopy.read");
+#endif
           Builder.CreateStore(load, castedDst, false /* isVolatile */);
         } else {
           assert(WordSize == 8 && "Invalid word size!");
           Type *i64p = PointerType::getUnqual(Type::getInt64Ty(ctx));
           auto pDst = Builder.CreatePointerCast(dst, i64p, "vacopy.cast.dst");
           auto pSrc = Builder.CreatePointerCast(src, i64p, "vacopy.cast.src");
-          auto val = Builder.CreateLoad(pSrc, std::string());
+
+#if LLVM_VERSION_CODE >= LLVM_VERSION(15, 0)
+          auto pSrcType = Builder.getPtrTy();
+          auto pDstType = Builder.getPtrTy();
+#else
+          auto pSrcType = pSrc->getType()->getPointerElementType();
+          auto pDstType = pDst->getType()->getPointerElementType();
+#endif
+          auto val = Builder.CreateLoad(pSrcType, pSrc);
           Builder.CreateStore(val, pDst, ii);
 
           auto off = ConstantInt::get(Type::getInt64Ty(ctx), 1);
-          pDst = Builder.CreateGEP(nullptr, pDst, off, std::string());
-          pSrc = Builder.CreateGEP(nullptr, pSrc, off, std::string());
-          val = Builder.CreateLoad(pSrc, std::string());
+          pDst = Builder.CreateGEP(pDstType, pDst, off);
+          pSrc = Builder.CreateGEP(pSrcType, pSrc, off);
+          val = Builder.CreateLoad(pSrcType, pSrc);
           Builder.CreateStore(val, pDst);
-          pDst = Builder.CreateGEP(nullptr, pDst, off, std::string());
-          pSrc = Builder.CreateGEP(nullptr, pSrc, off, std::string());
-          val = Builder.CreateLoad(pSrc, std::string());
+          pDst = Builder.CreateGEP(pDstType, pDst, off);
+          pSrc = Builder.CreateGEP(pSrcType, pSrc, off);
+          val = Builder.CreateLoad(pSrcType, pSrc);
           Builder.CreateStore(val, pDst);
         }
         ii->eraseFromParent();

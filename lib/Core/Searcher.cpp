@@ -25,11 +25,15 @@
 #include "klee/Internal/Support/ModuleUtil.h"
 #include "klee/Internal/System/Time.h"
 #include "klee/Internal/Support/ErrorHandling.h"
-#include "llvm/IR/CallSite.h"
+
+#include "klee/Internal/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
+DISABLE_WARNING_POP
 
 #include <cassert>
 #include <climits>

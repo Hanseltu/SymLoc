@@ -31,6 +31,8 @@
 #include <errno.h>
 #include <sstream>
 #include <random>
+#include <cstdint>
+
 using namespace llvm;
 using namespace klee;
 
@@ -442,7 +444,8 @@ void SpecialFunctionHandler::handleMalloc(ExecutionState &state,
       }
   }
 
-  if ((file_name.size() == 0 || isRuntimeLib == 0) && setSymMalloc == 1){
+  //if ((file_name.size() == 0 || isRuntimeLib == 0) && setSymMalloc == 1){
+  if (setSymMalloc == 1){
     std::string name = "";
     executor.executeAllocForMalloc(state, arguments[0], false, target, name);
   }

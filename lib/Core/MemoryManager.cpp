@@ -23,7 +23,7 @@
 #include "klee/klee.h"
 using namespace klee;
 
-namespace {
+namespace klee {
 
 llvm::cl::OptionCategory MemoryCat("Memory management options",
                                    "These options control memory management.");
