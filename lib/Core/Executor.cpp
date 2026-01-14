@@ -923,7 +923,7 @@ void scan2(ref<Expr> e, std::set<std::string> &symNameList) {
 bool hasSymbolicMallocVariable(ref<Expr> address, MallocMemoryMap mmm){
 
     std::set<std::string> nameList;
-    const Array *array = scan2(address, nameList);
+    scan2(address, nameList);
     bool isSymbolicAddress = 0;
     std::string sym_name = "";
     //MallocMemoryMap mmm = state.addressSpace.mobjects;
