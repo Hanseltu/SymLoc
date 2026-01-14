@@ -909,21 +909,21 @@ void Executor::branch(ExecutionState &state,
 }
 
 // *Haoxin start
-const Array* scan2(ref<Expr> e, std::set<std::string> &symNameList) {
-    const Array *array;
+void scan2(ref<Expr> e, std::set<std::string> &symNameList) {
+    const Array *array = nullptr;
     Expr *ep = e.get();
-        for (unsigned i=0; i<ep->getNumKids(); i++)
-          scan2(ep->getKid(i), symNameList);
-        if (const ReadExpr *re = dyn_cast<ReadExpr>(e)) {
-          symNameList.insert(re->updates.root->name);
-          array = re->updates.root;
-        }
-        return array;
+    for (unsigned i=0; i<ep->getNumKids(); i++)
+        scan2(ep->getKid(i), symNameList);
+    if (const ReadExpr *re = dyn_cast<ReadExpr>(e)) {
+        symNameList.insert(re->updates.root->name);
+        array = re->updates.root;
+    }
 }
+
 bool hasSymbolicMallocVariable(ref<Expr> address, MallocMemoryMap mmm){
 
     std::set<std::string> nameList;
-    const Array *array = scan2(address, nameList);
+    scan2(address, nameList);
     bool isSymbolicAddress = 0;
     std::string sym_name = "";
     //MallocMemoryMap mmm = state.addressSpace.mobjects;
@@ -1159,7 +1159,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     //printf("### start executeMemoryOperation is a symbolic variable ... \n");
     // store the symbolic name in a array
     std::set<std::string> nameList;
-    const Array *array = scan2(condition, nameList);
+    scan2(condition, nameList);
     bool isSymbolicAddress;
     std::string sym_name;
     MallocMemoryMap mmm = current.addressSpace.mobjects;
@@ -1735,8 +1735,6 @@ const Array* scan2(ref<Expr> e, std::set<std::string> &symNameList) {
 // *Haoxin end
 //
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
-  //new added test code
-  static int callMallocFunction = 0;
   //int callBitcast = 0;
   Instruction *i = ki->inst;
   switch (i->getOpcode()) {
@@ -2403,7 +2401,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> base = eval(ki, 0, state).value;
     if (!isa<ConstantExpr>(base)) {
         std::set<std::string> nameList;
-        const Array *array = scan2(base, nameList);
+        scan2(base, nameList);
         bool isSymbolicAddress;
         std::string sym_name;
         MallocMemoryMap mmm = state.addressSpace.mobjects;
@@ -2430,7 +2428,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> value = eval(ki, 0, state).value;
     if (!isa<ConstantExpr>(base)) {
         std::set<std::string> nameList;
-        const Array *array = scan2(base, nameList);
+        scan2(base, nameList);
         bool isSymbolicAddress;
         std::string sym_name;
         MallocMemoryMap mmm = state.addressSpace.mobjects;
@@ -3436,7 +3434,7 @@ void Executor::callExternalFunction(ExecutionState &state,
         // checking wether it is a freed argument before the exact call'
         llvm::errs() << "\nusing a variable which was freed" << "\n";
         std::set<std::string> nameList1;
-        const Array *array1 = scan2(arg, nameList1);
+        scan2(arg, nameList1);
         std::string sym_name1;
         MallocMemoryMap mmm1 = state.addressSpace.mobjects;
         for (auto iter = mmm1.begin(); iter != mmm1.end(); iter++){
@@ -3456,7 +3454,7 @@ void Executor::callExternalFunction(ExecutionState &state,
         }
         // end checking of free
       std::set<std::string> nameList;
-      const Array *array = scan2(arg, nameList);
+      scan2(arg, nameList);
       bool isSymbolicAddress;
       std::string sym_name;
       MallocMemoryMap mmm = state.addressSpace.mobjects;
@@ -3764,7 +3762,6 @@ void Executor::executeAllocForMalloc(ExecutionState &state,
     mallocOp = std::make_pair(mo_buffer, os_buffer);
     ref<Expr> moMallocBufferAddress = ConstantExpr::create(mo_buffer->address, 64);
     // create a symbolic (mo, os);
-    unsigned id = 0;
     std::string uniqueName = sym_name;
     //while (!state.arrayNames.insert(uniqueName).second) {
     //    uniqueName = sym_name + "_" + llvm::utostr(++id);
@@ -3999,7 +3996,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
 
     // store the symbolic name in a array
     std::set<std::string> nameList;
-    const Array *array = scan2(address, nameList);
+    scan2(address, nameList);
     
     bool isSymbolicAddress;
     std::string sym_name;

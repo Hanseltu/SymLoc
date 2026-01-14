@@ -697,16 +697,15 @@ void SpecialFunctionHandler::handleErrnoLocation(
 }
 //*Haoxin start
 //For find the special symbolic array
-const Array* scan22(ref<Expr> e, std::set<std::string> &symNameList) {
-    const Array *array;
+void scan22(ref<Expr> e, std::set<std::string> &symNameList) {
+    const Array *array = nullptr;
     Expr *ep = e.get();
-        for (unsigned i=0; i<ep->getNumKids(); i++)
-          scan22(ep->getKid(i), symNameList);
-        if (const ReadExpr *re = dyn_cast<ReadExpr>(e)) {
-          symNameList.insert(re->updates.root->name);
-          array = re->updates.root;
-        }
-        return array;
+    for (unsigned i=0; i<ep->getNumKids(); i++)
+        scan22(ep->getKid(i), symNameList);
+    if (const ReadExpr *re = dyn_cast<ReadExpr>(e)) {
+        symNameList.insert(re->updates.root->name);
+        array = re->updates.root;
+    }
 }
 //*Haoxin end
 void SpecialFunctionHandler::handleCalloc(ExecutionState &state,
@@ -731,7 +730,7 @@ void SpecialFunctionHandler::handleCalloc(ExecutionState &state,
   else {
     klee_warning_once(0, "execute symbolic calloc !");
     std::set<std::string> nameList;
-    const Array *array = scan22(address, nameList);
+    scan22(address, nameList);
     bool isSymbolicAddress;
     std::string sym_name;
     MallocMemoryMap mmm = state.addressSpace.mobjects;
@@ -804,7 +803,7 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
   else {
     klee_warning_once(0, "execute symbolic realloc!");
     std::set<std::string> nameList;
-    const Array *array = scan22(address, nameList);
+    scan22(address, nameList);
     bool isSymbolicAddress;
     std::string sym_name;
     MallocMemoryMap mmm = state.addressSpace.mobjects;
@@ -878,7 +877,7 @@ void SpecialFunctionHandler::handleFree(ExecutionState &state,
         executor.terminateStateOnError(state, "an invalid free bug is detected!", Executor::User);
     }
     std::set<std::string> nameList;
-    const Array *array = scan22(address, nameList);
+    scan22(address, nameList);
     bool isSymbolicAddress;
     std::string sym_name;
     MallocMemoryMap mmm = state.addressSpace.mobjects;
@@ -908,7 +907,6 @@ void SpecialFunctionHandler::handleFree(ExecutionState &state,
         const MemoryObject *mo = shared_map[sym_name].first;
         //Not free here, if everything is done, then free all buffers in moMallocBufferAddress
         address = ConstantExpr::create(mo->address, 64);
-        uint64_t *p = (uint64_t*)mo->address;
         // TODO Also can add double free detection here
         state.addressSpace.free_list.insert(sym_name);
         // add stacktrace
