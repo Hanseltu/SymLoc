@@ -331,6 +331,7 @@ public:
   unsigned getNumTestCases() { return m_numGeneratedTests; }
   unsigned getNumPathsExplored() { return m_pathsExplored; }
   void incPathsExplored() { m_pathsExplored++;
+    //llvm::errs() << "paths explored: " << m_pathsExplored << "\n";
     // new added for testing
       /*
       if (m_pathsExplored == 10000){
@@ -512,19 +513,19 @@ void KleeHandler::processTestCase(const ExecutionState &state,
       b.numObjects = out.size();
       b.objects = new KTestObject[b.numObjects];
       assert(b.objects);
+      unsigned numWritten = 0;
       for (unsigned i=0; i<b.numObjects; i++) {
-        KTestObject *o = &b.objects[i];
+        std::string name = out[i].first;
+        if (name.rfind("addr_", 0) == 0)
+         continue;
+        KTestObject *o = &b.objects[numWritten++];
         o->name = const_cast<char*>(out[i].first.c_str());
-        //std::string target(o->name);
-        //printf("target name = %s\n", o->name);
-        //if (target.find("sym_") == std::string::npos){
-            o->numBytes = out[i].second.size();
-            o->bytes = new unsigned char[o->numBytes];
-            assert(o->bytes);
-            std::copy(out[i].second.begin(), out[i].second.end(), o->bytes);
-            //printf("bytes --- = %s\n", o->bytes);
-        //}
+        o->numBytes = out[i].second.size();
+        o->bytes = new unsigned char[o->numBytes];
+        assert(o->bytes);
+        std::copy(out[i].second.begin(), out[i].second.end(), o->bytes);
       }
+      b.numObjects = numWritten;
 
       if (!kTest_toFile(&b, getOutputFilename(getTestFilename("ktest", id)).c_str())) {
           klee_warning("unable to write output test case, losing it");

@@ -3727,6 +3727,7 @@ void Executor::executeAlloc(ExecutionState &state,
 }
 
 // *Haoxin start
+static int sym_index = 0;
 void Executor::executeAllocForMalloc(ExecutionState &state,
                             ref<Expr> size,
                             bool isLocal,
@@ -3750,8 +3751,13 @@ void Executor::executeAllocForMalloc(ExecutionState &state,
     //bindObjectInState(state, mo_buffer, isLocal);
 
     if (sym_name.size() == 0 && mo_buffer!=0) {
-      sym_name = "sym_" + std::to_string(mo_buffer->address);
+      //sym_name = "sym_" + std::to_string(mo_buffer->address);
+      sym_name = "addr_" + std::to_string(sym_index);
+      sym_index++;
     //store buffer map
+    //llvm::errs() << "malloc symbolic name: " << sym_name << "\n";
+    //llvm::errs() << "function name : " << target->getSourceLocation() << "\n";
+
     ObjectState *os_buffer = new ObjectState(mo_buffer);
 
     //create a temporary mo, just for creating a symbolic Expr
@@ -3796,11 +3802,11 @@ void Executor::executeAllocForMalloc(ExecutionState &state,
     ref<Expr> symExpr = ReadExpr::createTempRead(array, Expr::Int64);
 
     // THX code for add the range of symbolic addresses
-    /*
+    
     ref<Expr> e1 = symExpr;
-    // add the first constraints address >= 0
+    // add the first constraints address = 0
     if (e1->getWidth() != Expr::Bool)
-        e1 = UgeExpr::create(e1, ConstantExpr::create(0, e1->getWidth()));
+        e1 = UgeExpr::create(e1, ConstantExpr::create(1, e1->getWidth()));
     bool res1;
     bool success1 __attribute__ ((unused)) = solver->mustBeFalse(state, e1, res1);
     assert(success1 && "FIXME: Unhandled solver failure");
@@ -3814,7 +3820,7 @@ void Executor::executeAllocForMalloc(ExecutionState &state,
     bool success2 __attribute__ ((unused)) = solver->mustBeFalse(state, e2, res2);
     assert(success2 && "FIXME: Unhandled solver failure");
     addConstraint(state, e2);
-    */
+    
     // here we add constraints to the symbol
     bindLocal(target, state, symExpr);
 
@@ -3944,8 +3950,30 @@ void Executor::resolveExact(ExecutionState &state,
   p = optimizer.optimizeExpr(p, true);
   // XXX we may want to be capping this?
   ResolutionList rl;
-  state.addressSpace.resolve(state, solver, p, rl);
+  // *Haoxin add for replace the symbolic address
+  std::set<std::string> nameList;
+  scan2(p, nameList);
+  bool isSymbolicAddress = 0;
+  std::string sym_name;
+  MallocMemoryMap mmm = state.addressSpace.mobjects;
+  for (auto iter = mmm.begin(); iter != mmm.end(); iter++){
+    std::string key = iter->first;
+    std::set<std::string>::iterator iter_set;
+    iter_set = nameList.find(key);
+    if (iter_set != nameList.end()){
+      sym_name = key;
+      isSymbolicAddress = 1;
+    }
+  }
+  if (isSymbolicAddress){ // handle symbolic address
+    std::map<std::string, ObjectPair> shared_map = state.addressSpace.mobjects;
+    const MemoryObject *mo = shared_map[sym_name].first;
+    p = ConstantExpr::create(mo->address, 64);
+    return;
+  }
 
+  state.addressSpace.resolve(state, solver, p, rl);
+  
   ExecutionState *unbound = &state;
   for (ResolutionList::iterator it = rl.begin(), ie = rl.end();
        it != ie; ++it) {
@@ -4646,7 +4674,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
   std::vector<const Array*> objects;
   for (unsigned i = 0; i != state.symbolics.size(); ++i){
     for (auto s : state.symbolics){
-        ;;//printf("symbolic mo->address = %d\n", s.first->address);
+        //printf("symbolic mo->address = %d\n", s.first->address);
         //printf("symbolic array->name = %s\n", s.second->name.c_str());
     }
     objects.push_back(state.symbolics[i].second);
