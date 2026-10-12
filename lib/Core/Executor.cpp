@@ -3802,7 +3802,7 @@ void Executor::executeAllocForMalloc(ExecutionState &state,
     ref<Expr> symExpr = ReadExpr::createTempRead(array, Expr::Int64);
 
     // THX code for add the range of symbolic addresses
-    
+    /*
     ref<Expr> e1 = symExpr;
     // add the first constraints address = 0
     if (e1->getWidth() != Expr::Bool)
@@ -3820,7 +3820,7 @@ void Executor::executeAllocForMalloc(ExecutionState &state,
     bool success2 __attribute__ ((unused)) = solver->mustBeFalse(state, e2, res2);
     assert(success2 && "FIXME: Unhandled solver failure");
     addConstraint(state, e2);
-    
+    */
     // here we add constraints to the symbol
     bindLocal(target, state, symExpr);
 
